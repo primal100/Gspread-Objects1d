@@ -5,6 +5,12 @@ function errorIfNegative(number, message, includeZero){
   }
 }
   
+/* Filters a 1d array (row, column or cell collection) by value
+*
+* @param {Array} valueList Array of values
+* @param {Value} value Value to filter by
+* @return {Array} indexes Array of integers representing indexes in the valueList who's value matches 
+*/
 function filterByValue(valueList, value){
   var indexes = [], i = -1;
   while ((i = valueList.indexOf(value, i+1)) != -1){
@@ -32,12 +38,12 @@ function columnLetterToNumber(sheet, columnLetter){
  return sheet.getRange(columnLetter + "1").getColumn(); 
 }
 
-/* Enables the cache-commit functionality for 2d Ranges
+/* Object for storing a 2d range with extra functionality
 *
 * @param {Sheet} sheet The Sheet object the range belongs to
 * @param {Range} range The Range object
-* @param {Array} indexes An array of cells defined by rows and columns 
-* @return {CellCollection} the collection of cells
+* @param {Integer} rowHeaderSize The number of rows containing headers
+* @param {Integer} columnHeaderSize The number of columns containing headers
 */
 function Range2d(sheet, range, rowHeaderSize, columnHeaderSize){
   this.sheet = sheet;
@@ -76,6 +82,8 @@ function Range2d(sheet, range, rowHeaderSize, columnHeaderSize){
   }
 }
 
+/* Prototype for row, column and non-adjacent cell collection
+*/
 function Range1d(){
   this.sheet = false;
   this.headerSize = 0;
@@ -247,6 +255,11 @@ function Range1d(){
 }
 }
 
+/* Object for storing a non-adjacent collection of cells. Inherits from Range1d
+*
+* @param {Sheet} sheet The Sheet object the cells belong to
+* @param {Array} cellIndexes A 2d array containing row and column indexes
+*/
 function CellCollection(sheet, cellIndexes){
   this.sheet = sheet;
   this.indexes = cellIndexes;
@@ -331,6 +344,8 @@ function CellCollection(sheet, cellIndexes){
 
 CellCollection.prototype = new Range1d();
 
+/* Prototype for columns and rows. Inherits from Range1d
+*/
 function ColumnOrRow(){
   this.startPoint = function(){
     return this.headerSize + 1;
@@ -423,6 +438,13 @@ function ColumnOrRow(){
 
 ColumnOrRow.prototype = new Range1d();
 
+/* Object for managing a column as a 1d array. Inherits from ColumnOrRow
+*
+* @param {Sheet} sheet The Sheet object the column belongs to
+* @param {Integer} headerSize The number of rows to ignore when getting and setting values
+* @param {Integer} columnNumber The column number from which to create the column object
+* @param {Integer} headerColumn The column containing the header names to enable ORM-like functionality. Optional. If not set the first column in the sheet is used.
+*/
 function Column(sheet, headerSize, columnNumber, headerColumn){
   this.sheet = sheet;
   this.column = columnNumber;
@@ -464,6 +486,13 @@ function Column(sheet, headerSize, columnNumber, headerColumn){
 
 Column.prototype = new ColumnOrRow();
 
+/* Object for managing a row as a 1d array. Inherits from ColumnOrRow
+*
+* @param {Sheet} sheet The Sheet object the row belongs to
+* @param {Integer} headerSize The number of columns to ignore when getting and setting values
+* @param {Integer} rowNumber The row number from which to create th row object
+* @param {Integer} headerRow The row containing the header names to enable ORM-like functionality. Optional. If not set the first row in the sheet is used.
+*/
 function Row(sheet, headerSize, rowNumber, headerRow){
   this.sheet = sheet;
   this.row = rowNumber;
@@ -503,7 +532,7 @@ function Row(sheet, headerSize, rowNumber, headerRow){
 
 Row.prototype = new ColumnOrRow();
                                                    
-                                                   /**
+/**
 * Converts a 2d range to a 1d cells collection object
 *
 * @param {Sheet} sheet The sheet the cells belong to
@@ -528,11 +557,13 @@ function getCellCollection(sheet, indexes){
   return cells;
 }
 
-/* Object to store a column to easily return the cells or values as a 1D array
+/* Returns a Column object
 *
-* @param {Sheet} sheet the sheet object containing the row
-* @param {Integer} headerSize the number of rows containing headers
-* @param {Column} columnNumberOrLetter the column id by number or letter. This paramater is optional, if not given the next available empty column will be used.
+* @param {Sheet} sheet the sheet object containing the column
+* @param {Integer} headerSize the number of rows containing headers. Defaults to 0.
+* @param {ColumnIdentifier} columnIdentifier the column id by number or string (which matches the header of the column). This paramater is optional, if not given the next available empty column will be used.
+* @param {Integer} headerRowIdentifier If columnIdenitifer is a string, this is the row which will be searched to find a column whos' header matches the string. Defaults to 1.
+* @param {Integer} headerColumn The column containing the header names to enable ORM-like functionality. Optional. If not set the first column in the sheet is used.
 * @return {Column} the column object
 */
 function getColumn(sheet, headerSize, columnIdentifier, headerRowIdentifier, headerColumn){
@@ -550,20 +581,20 @@ function getColumn(sheet, headerSize, columnIdentifier, headerRowIdentifier, hea
   return new Column(sheet, headerSize, columnIdentifier, headerColumn);
 }
 
-/* Return an object to store a row to easily return the properties as a 1D array
+/* Returns a row object
 *
 * @param {Sheet} sheet the sheet object containing the row
-* @param {Integer} headerSize the number of columns containing headers
-* @param {rowIdentifier} rowIdentifier the row id as an integer. This paramater is optional, if not given the next available empty row will be used. Can also be a string which matches the value of the header of the row.
-* @param {headerColumnIdentifier} the id of the column containing the header, used if rowIdentifier is a string. If empty, a value of 1 is used.
-* @param {headerRow} the row containing headers
-* @return {Row} row object
+* @param {Integer} headerSize the number of columns containing headers. Defaults to 0.
+* @param {RowIdentifier} rowIdentifier the row id by number or string (which matches the header of the row). This paramater is optional, if not given the next available row will be used.
+* @param {Integer} headerColumnIdentifier If rowIdenitifer is a string, this is the column which will be searched to find a row whos' header matches the string. Defaults to 1.
+* @param {Integer} headerRow The row containing the header names to enable ORM-like functionality. Optional. If not set the first row in the sheet is used.
+* @return {Column} the row object
 */
 function getRow(sheet, headerSize, rowIdentifier, headerColumnIdentifier, headerRow){
   var headerRow = headerRow || 1;
   var headerSize = headerSize || 0;
   var rowIdentifier = rowIdentifier || sheet.getLastRow() + 1;
-  if (typeof columnIdentifier === "string"){
+  if (typeof headerColumnIdentifier === "string"){
     var headerColIdentifier = headerRowIdentifier || 1;
     var headerCol = getColumn(sheet, 0, headerRowIdentifier);
     var rowIdentifier = headerCol.first(columnIdentifier);
@@ -575,6 +606,14 @@ function getRow(sheet, headerSize, rowIdentifier, headerColumnIdentifier, header
   return new Row(sheet, headerSize, rowIdentifier, headerRow);
 }
 
+/* Returns a cell by matching row and column headers
+*
+* @param {Sheet} sheet the sheet object containing the cell
+* @param {String} rowHeader the value of the cell's row header
+* @param {String} columnHeader the value of the cell's column header
+* @param {Integer} rowHeader the row containing the headers. Defaults to 1.
+* @param {Integer} columnNumber the column containing the headers. Defaults to 1.
+*/
 function getCellByHeaders(sheet, rowHeader, columnHeader, rowNumber, columnNumber){
   var rowNumber = rowNumber || 1;
   var columnNumber = columnNumber || 1;
