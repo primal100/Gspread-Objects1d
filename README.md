@@ -26,3 +26,7 @@ function myFunction() {
   var name = column.date //Returns cell in column with row header 'date'
 }
 ```
+
+In addition to rows and columns, objects1d also allows interations with Cell Collections (non-adjacent cells).
+
+Lots more features to be documented soon, in the meantime check out the code.
