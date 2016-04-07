@@ -22,5 +22,7 @@ function myFunction() {
   row.addValueIfNotExists(['value1', 'value2'])//Runs add valueIfNotExists for each value in the array (uncomitted)
   row.getCell(1);                              //Returns a cell object by its index in the row
   row.getHeader();                             //Returns a cell object of the row header
+  var column = Objects1d.getColumn(sheet, 1, 'Name', 1, 1); //Returns a column by the header name 'Name', with headers in Row 1. Header Size: 1 and Column 1 contains headers to enable ORM
+  var name = column.date //Returns cell in column with row header 'date'
 }
 ```
