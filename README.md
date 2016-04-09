@@ -29,4 +29,6 @@ function myFunction() {
 
 In addition to rows and columns, objects1d also allows interations with Cell Collections (non-adjacent cells).
 
-Lots more features to be documented soon, in the meantime check out the code.
+Lots more features to be documented soon, in the meantime check out the code and the sheets documentation here:
+
+https://docs.google.com/macros/library/d/MS8m0Cjb7P7PEESdMy2qrTYoHEfXZl5VD/4
