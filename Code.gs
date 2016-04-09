@@ -1,293 +1,639 @@
-/**
-* Attempts to return a sheet belonging to a spreadsheet by name. If it doesn't exist the sheet will be created and returned.
+/** Generates an error message if a number is negative
 *
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to get or create
-* @return {Sheet} the sheet object
+* @param {number} number The number to check
+* @param {string} message Included in error message
+* @param {boolean} includeZero If set to true and number is zero then the error is generated
 */
-function getOrCreatesheet(spreadsheet, sheetName){
-  if (spreadsheet.getsheetByName(sheetName) == null) {
-    spreadsheet.insertsheet(sheetName);
-  }     
-  return spreadsheet.getsheetByName(sheetName);
-}
-
-/**
-* Rename any sheet, not just the active one as Google sheets normally only allows
-*
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {Sheet} sheet the sheet object to rename
-* @param {string} newName the new name for the sheet
-*/
-function renamesheet(spreadsheet, sheet, newName){
-  var activesheet = spreadsheet.getActivesheet();
-  spreadsheet.setActivesheet(sheet);
-  spreadsheet.renameActivesheet(newName);
-  if (activesheet){
-    spreadsheet.setActivesheet(activesheet);
+function errorIfNegative(number, message, includeZero){
+  includeZero = includeZero || false;
+  if ((number < 0) || (includeZero && number == 0)){  
+    throw new Error('argument to' + message + ' must not be a negative number'); 
   }
 }
-
-
-/**
-* Attempts to rename a sheet by it's current name if it exists.
+  
+/** Filters a 1d array (row, column or cell collection) by value
 *
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to rename
-* @param {string} newName the new name for the sheet
-* @return {boolean} true if the sheet was found and renamed, false otherwise
+* @param {Array<number|integer>} valueList Array of values
+* @param {string|number} value Value to filter by
+* @return {Array<number>} Array of numbers representing indexes in the valueList who's value matches 
 */
-function renamesheetIfExists(spreadsheet, sheetName, newName){
-  var sheet = spreadsheet.getsheetByName(sheetName); 
-  if (sheet){
-    renamesheet(spreadsheet, sheet, newName);
-    return true;
-  }
-  else{
-    return false;
-  }
+function filterByValue(valueList, value){
+  var indexes = [], i = -1;
+  while ((i = valueList.indexOf(value, i+1)) != -1){
+        indexes.push(i);
+    }
+  return indexes;   
 }
 
-/**
-* Move any sheet to a new position, not just the active one as Google sheets normally only allows
+/** Converts a range into cell indexes
 *
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {Sheet} sheet the sheet object to move
-* @param {number} newpos the position to move the sheet to
+* @param {Range} range The range object to convert
+* @return {Array<Array<number>>} An array of cells defined by rows and columns 
 */
-function movesheet(spreadsheet, sheet, newpos){
-  var activesheet = spreadsheet.getActivesheet();
-  spreadsheet.setActivesheet(sheet);
-  spreadsheet.moveActivesheet(newpos);
-  if (activesheet){
-    spreadsheet.setActivesheet(activesheet);
-  }
+function splitRangeIntoCellIndexes(range){
+	var indexes = [];
+	var firstCell = range.getCell(1,1);
+	var firstRow = firstCell.getRow();
+	var firstCol = firstCell.getColumn();
+    var height = range.getHeight();
+    var width = range.getWidth();
+	for ( var row = 0; row < height; row++ ){
+		for ( var col = 0; col < width; col++ ){
+			indexes.push([row + firstRow, col + firstCol]);
+		}
+	}
+    return indexes;	
 }
 
-/**
-* Attemts to move a sheet by name if it exists.
+/** Columns a column letter to it's equivalent number
 *
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to move
-* @param {number} newpos the position to move the sheet to
-* @return {boolean} true if the sheet was found and moved, false otherwise
+* @param {Sheet} sheet The Sheet object containing the column
+* @param {string} columnLetter The column's letter
+* @return {number} The column's number
 */
-function movesheetIfExists(spreadsheet, sheetName, newpos){
-  var sheet = spreadsheet.getsheetByName(sheetName); 
-  if (sheet){
-    movesheet(spreadsheet, sheet, newpos)
-    return true;
-  }
-  else{
-    return false;
-  }
+function columnLetterToNumber(sheet, columnLetter){
+ return sheet.getRange(columnLetter + "1").getColumn(); 
 }
 
-/**
-* Duplicate any sheet, not just the active one as Google sheets normally only allows
+/** Object for storing a 2d range with extra functionality
 *
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {Sheet} sheet the sheet object to duplicate
-* @return {Sheet} the new sheet
+* @param {Sheet} sheet The Sheet object the range belongs to
+* @param {Range} range The Range object
+* @param {number} rowHeaderSize The number of rows containing headers
+* @param {number} columnHeaderSize The number of columns containing headers
 */
-function duplicatesheet(spreadsheet, sheet){
-  var activesheet = spreadsheet.getActivesheet();
-  spreadsheet.setActivesheet(sheet);
-  var newsheet = spreadsheet.duplicateActivesheet();
-  if (activesheet){
-    spreadsheet.setActivesheet(activesheet);
+function Range2d(sheet, range, rowHeaderSize, columnHeaderSize){
+  this.sheet = sheet;
+  this.range = range;
+  this.startRow = range.getRow();
+  this.startColumn = range.getColumn;
+  this.rowHeaderSize = rowHeaderSize || 0;
+  this.columnHeaderSize = columnHeaderSize || 0;
+  this.getValue = function(index, row, column){ 
+   this.values = this.values || this.getValues();
+   return this.values[row][column];
   }
-  return newsheet;
-}
-
-
-/**
-* Duplicate a sheet by name if it exists.
-*
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to duplicate
-* @return {boolean} true if the sheet was found and moved, false otherwise
-*/
-function duplicatesheetIfExists(spreadsheet, sheetName){
-  var sheet = spreadsheet.getsheetByName(sheetName); 
-  if (sheet){
-    duplicatesheet(spreadsheet, sheet);
-    return true;
+  this.getValues = function(){
+    var values = this.getRange().getValues();
+    this.values = values;
+    return values;
   }
-  else{
-    return false;
+  this.setValue = function(row, column, value){
+    this.values = this.values || this.getValues();
+    this.values[row][column] = value; 
+    return this
   }
-}
-
-/**
-* Duplicate a sheet and rename either the old or new sheet
-*
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {Sheet} sheet the sheet object to duplicate
-* @param {string} newName the new name of the sheet that will be renamed
-* @param {boolean} renameOld if true, renames the originally duplicated sheet, if false renames the newly created sheet
-* @return {Sheet} the new sheet
-*/
-function duplicateRenamesheet(spreadsheet, sheet, newName, renameOld){
-  var newsheet = duplicatesheet(spreadsheet, sheet);
-  var renameNew = renameOld || false; 
-  if (renameOld){
-    renamesheet(spreadsheet, sheet, newName);
-  }
-  else{
-    renamesheet(spreadsheet, newsheet, newName);
-  }
-  return newsheet;
-}
-
-
-/**
-* Duplicate and renames a sheet by name if it exists.
-*
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to duplicate
-* @param {string} newName the new name of the sheet that will be renamed
-* @param {boolean} renameOld if true, the originally duplicated sheet; if false renames the newly created sheet. Default is false.
-* @return {Sheet} the new sheet or false if the sheet was not found
-*/
-function duplicateRenamesheetIfExists(spreadsheet, sheetName, newName, renameOld){
-  var sheet = spreadsheet.getsheetByName(sheetName); 
-  if (sheet){
-    var renameNew = renameOld || false;
-    var newsheet = duplicateRenamesheet(spreadsheet, sheetName, newName, renameOld);
-    return newsheet;
-  }
-  else{
-    return false;
-  }
-}
-
-/**
-* Attemts to delete a sheet by name if it exists.
-*
-* @param {Spreadsheet} spreadsheet the spreadsheet object
-* @param {string} sheetName the name of the sheet to get or create
-* @return {boolean} true if the sheet was found and deleted, false otherwise
-*/
-function deletesheetIfExists(spreadsheet, sheetName){
-  var sheet = spreadsheet.getsheetByName(sheetName); 
-  if (sheet){
-    spreadsheet.deletesheet(sheet);
-    return true;
-  }
-  else{
-    return false;
-  }
-}
-
-/**
-* Returns a data range without the specified number of header rows
-*
-* @param {Sheet} sheet the sheet object
-* @param {number} rowHeaderSize the number of header rows. If not set a value of 1 is used.
-* @return {Range} the data range
-*/
-function dataRangeWithoutHeader(sheet, rowHeaderSize){
-  var rowHeaderSize = ((rowHeaderSize -1) || 0) + 1;
-  if (sheet.getLastRow() <= rowHeaderSize){
-      return false
+  this.setValues = function(values){
+    var numRows = values.length;
+    var numColumns = values[0].length;
+    this.sheet.getRange(this.startRow, this.startColumn, numRows, numColumns).setValues(values);
+    this.values = values;
+    return this;
   }  
-  else{
-      var rows = sheet.getRange(rowHeaderSize + 1, 1, sheet.getLastRow() - 1, sheet.getLastColumn());  
-      return rows
+  this.commit = function(){
+    this.setValues(this.values);
+    return this;
+  }
+  this.getRange = function(){
+    return this.range;
   }
 }
 
-
-/**
-* Sorts the full data range without the specified number of header rows
-*
-* @param {Sheet} sheet the sheet object
-* @param {sortSpecObj} sortOptions the sort options as accepted by the Google sheets sort.range method
-* @param {number} rowHeaderSize the number of header rows. If not set a value of 0 is used.
-* @return {Range} the newly sorted data range
+/** Prototype for row, column and non-adjacent cell collection
 */
-function sortAll(sheet, sortOptions, rowHeaderSize){
-  var rowHeaderSize = rowHeaderSize || 0;
-  var dataRange = dataRangeWithoutHeader(sheet, rowHeaderSize);
-  if (dataRange){
-    return dataRange.sort(sortOptions);
+function Range1d(){
+  this.sheet = false;
+  this.headerSize = 0;
+  this.getValue = function(index){ 
+   this.values = this.values || this.getValues();
+   return this.values[index];
   }
-  else{
-    return false;
+  this.setValue = function(index, value){
+    if (typeof index === "string"){
+      var index = getIndexByHeader(index);
+    }
+    this.values = this.values || this.getValues()
+    this.values[index] = value 
+    return this;
   }
+  this.commit = function(){
+    this.setValues(this.values);
+    return this;
+  }
+  this.getList = function(func){
+   var items = [];
+    for ( i=0; i<= this.count(); i++ ){
+      items[i] = func(i);
+    }
+    return items
+  }
+  this.getCells = function(){
+    return this.getList(this.getCell);
+  }
+  this.fillArray = function(value){
+    arr = [];
+    for ( i=0; i < this.count(); i++ ){
+      array[i] = value;
+    }
+    return array;
+  }
+  this.getBackgrounds = function(){
+    return this.to1d(this.getRange().getBackgrounds());
+  }
+  this.getDataValidations = function(){
+    return this.to1d(this.getRange().getDataValidations());
+  }
+  this.getFontColors = function(){
+    return this.to1d(this.getRange().getFontColors()); 
+  }
+  this.getFontFamilies = function(){
+    return this.to1d(this.getRange().getFontFamilies());
+  }
+  this.getFontSizes = function(){
+    return this.to1d(this.getRange().getFontSizes());   
+  }
+  this.getFontStyles = function(){
+    return this.to1d(this.getRange().getFontStyles());  
+  }
+  this.getFontWeights = function(){
+    return this.to1d(this.getRange().getFontWeights());
+  }
+  this.getFormulas = function(){
+    return this.to1d(this.getRange().getFormulas());
+  }
+  this.getFormulasR1C1 = function(){
+    return this.to1d(this.getRange().getFormulasR1C1()); 
+  }
+  this.getHorizontelAlignments = function(){
+    return this.to1d(this.getRange().getHorizontelAlignment());  
+  }  
+  this.getNotes = function(){
+    return this.to1d(this.getRange().getNotes()); 
+  }  
+  this.getNumberFormats = function(){
+    return this.to1d(this.getRange().getNumberFormats());
+  } 
+  this.getValues = function(){
+    var values = this.to1d(this.getRange().getValues());
+    this.values = values;
+    return values;
+  }
+  this.getVerticalAlignments = function(){
+    return this.to1d(this.getRange().getVerticalAlignments());   
+  }  
+  this.getWraps = function(){
+    return this.to1d(this.getRange().getWraps());
+  } 
+  this.setBackgrounds = function(values1d){
+    return this.getRange().setBackgrounds(this.to2d(values1d, this.get2dParamater('Backgrounds')));
+  }
+  this.setDataValidations = function(values1d){
+    return this.getRange().setDataValidations(this.to2d(values1d, this.get2dParamater('DataValidations')));
+  }
+  this.setFontColors = function(values1d){
+    return this.getRange().setFontColors(this.to2d(values1d, this.get2dParamater('FontColors')));
+  }
+  this.setFontFamilies = function(values1d){
+    return this.getRange().setFontFamilies(this.to2d(values1d, this.get2dParamater('FontFamilies')));
+  }  
+  this.setFontLines = function(values1d){
+    return this.getRange().setFontLines(this.to2d(values1d, this.get2dParamater('FontLines')));
+  }
+  this.setFontSizes = function(values1d){
+    return this.getRange().setFontSizes(this.to2d(values1d, this.get2dParamater('FontSizes')));
+  }   
+  this.setFontStyles = function(values1d){
+    return this.getRange().setFontStyles(this.to2d(values1d, this.get2dParamater('FontStyles')));
+  }
+  this.setFontWeights = function(values1d){
+    return this.getRange().setFontWeights(this.to2d(values1d, this.get2dParamater('FontWeights')));
+  }   
+  this.setFormulas = function(values1d){
+    return this.getRange().Formulas(this.to2d(values1d, this.get2dParamater('Formula')));
+  }
+  this.setFormulasR1C1 = function(values1d){
+    return this.getRange().setFormulasR1C1(this.to2d(values1d, this.get2dParamater('FormulasR1C1')));
+  }  
+  this.setHorizontalAlignments = function(values1d){
+    return this.getRange().setHorizontalAlignments(this.to2d(values1d, this.get2dParamater('HorizontalAlignments')));
+  }
+  this.setNotes = function(values1d){
+    return this.getRange().setNotes(this.to2d(values1d, this.get2dParamater('Notes')));
+  }
+  this.setNumberFormats = function(values1d){
+    return this.getRange().setNumberFormats(this.to2d(values1d, this.get2dParamater('NumberFormats')));
+  }
+  this.setValues = function(values1d){
+    var newValues = this.to2d(values1d, this.get2dParamater('Values'));
+    var range = this.getRange().setValues(newValues);
+    this.values = newValues;
+    return range;
+  }  
+  this.setVerticalAlignments = function(values1d){
+    return this.getRange().setVerticalAlignments(this.to2d(values1d, this.get2dParamater('VerticalAlignments')));
+  }
+  this.setWraps = function(values1d){
+    return this.getRange().setWraps(this.to2d(values1d, this.get2dParamater('Wraps')));
+  } 
+  this.indexes2Cells = function(indexes){
+     var cells = [];
+     for ( var i in indexes ){
+        cellIndexes[i] = this.getCellIndex(indexes[i]);
+     }
+     var cellCollection = getCellCollection(this.sheet, indexes);       
+     return cellCollection;   
+  }
+  this.filter = function(value, useCachedValues, filterType){
+    var useCachedValues = useCachedValues || false;
+    var filterType = filterType || 0;
+
+    if (useCachedValues){
+      var values = this.values || this.getValues();
+    }
+    else{
+      var values = this.getValues();
+    }
+    if (filterType == 0){
+      var indexes = filterByValue(values, value);
+    }
+    return indexes;
+  }
+  this.first = function(value, useCahcedValues, filterType){
+    var useCachedValues = useCachedValues || false;
+    var filterType = filterType || 0;
+    var indexes = this.filter(value);
+    if ( indexes.length > 0){
+      var index = indexes[0];
+      return index;
+    }
+    else{
+      throw new Error(value + ' not found in this range'); 
+    }  
+}
 }
 
-/**
-* Auto-resizes all the columns in a sheet
+/** Object for storing a non-adjacent collection of cells. Inherits from Range1d
 *
-* @param {Sheet} sheet the sheet object
+* @param {Sheet} sheet The Sheet object the cells belong to
+* @param {Array<Array<number>>} cellIndexes A 2d array containing row and column indexes
 */
-function autoResizeAll(sheet){ 
-  var lastColumn = sheet.getLastColumn();
-  for ( var i = 1; i <= lastColumn; i++ ) {
-    sheet.autoResizeColumn(i);
+function CellCollection(sheet, cellIndexes){
+  this.sheet = sheet;
+  this.indexes = cellIndexes;
+  this.addCell = function(row, col){
+    this.indexes.push(row, col); 
+    this.range = this.indexes2range();
+    if ( this.values !== undefined ){
+      var length = this.values.length;
+      var value = this.getCell(length - 1).getValue();
+      this.values.push(value);
+    }
+    return this
+  }
+  this.indexes2Range = function(){
+    var rows = [];
+    var columns = [];
+    for ( var i in this.indexes ){
+      rows.push(this.indexes[i][0]);
+      columns.push(this.indexes[i][1]);
+    }
+    rows.sort();
+    columns.sort();
+    var range = this.sheet.getRange(rows[0], columns[0], rows.slice(-1)[0], columns.slice(-1)[0]);
+    return range; 
+  }
+  this.range = this.indexes2Range();
+  this.getRange = function(){
+   return this.range; 
+  }
+  this.getIndex = function(row, col){
+    var index = filterByValue(this.indexes, [row, col]);
+    return index;
+  }
+  this.getCell = function(index){
+    var cellIndex = this.indexes[index];
+    var cell = this.range.getCell(cellIndex[0], cellIndex[1]);
+    return cell;
+  }
+  this.getCellIndex = function(index){
+    return this.indexes[index];
+  }
+  this.count = function(){
+    return this.indexes.length;
+  }
+  this.to1d = function(array2d){
+    var array1d = [];
+    for ( var i in this.indexes ){
+      var row = this.indexes[i][0] -1;
+      var column = this.indexes[i][1] - 1;
+      array1d[i] = array2d[row][column];
+    }
+    return array1d;
+  }
+  this.to2d = function(array1d, rangeValues){
+    for ( var i in this.indexes ){
+      var row = this.indexes[i][0] -1;
+      var column = this.indexes[i][1] - 1;
+      rangeValues[row][column] = array1d[i];
+    }
+    return rangeValues;
+  }  
+  this.get2dParamater = function(dataType){
+    return eval('this.getRange().get' + dataType + '()');
+  }
+  this.getA1Notation = function(){
+    var a1Array = [];
+    for ( i=0; i<= this.count(); i++ ){
+      cells[i] = this.getCell(i).getA1Notation();
+    }
+    return cells;
+  }
+  this.isBlank = function(){
+    var values = this.getValues().join("");
+    if ( values == "" ){
+      return true;
+    }
+    else{
+      return false;  
+    }
   }
 }
 
-/**
-* Bolds all cells in Column A and Row 1
-*
-* @param {Sheet} sheet the sheet object
+CellCollection.prototype = new Range1d();
+
+/** Prototype for columns and rows. Inherits from Range1d
 */
-function boldHeaders(sheet){
-  sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight("bold");
-  sheet.getRange(1, 1, sheet.getLastRow(), 1).setFontWeight("bold");
-}
-
-/**
-* Freeze headers (1 row and 1 column by default)
-*
-* @param {Sheet} sheet the sheet object
-* @param {number} rows the number of rows to freeze. Optional. Set to 1 if not given.
-* @param {number} columns the number of columns to freeze. Optional. Set to 1 if not given
-*/ 
-function freezeHeaders(sheet, rows, columns){
-  var rows = rows || 1;
-  var columns = columns || 1;
-  sheet.setFrozenRows(rows);
-  sheet.setFrozenColumns(columns);
-}
-
-/**
-* Converts a 2d list of values to a single array
-*
-* @param {Array} values2d 2d list of values
-* @return {Array} values1d 1d list of values
-*/ 
-function to1d(values2d){
+function ColumnOrRow(){
+  this.startPoint = function(){
+    return this.headerSize + 1;
+  }
+  this.count = function(){
+    var count = this.last() - this.startPoint() + 1;
+    return count
+  }
+  this.last = function(){
+    if ( this.values === undefined ){
+      var last = this.lastOnSheet() - this.headerSize;
+    }
+    else{
+      var last = this.values.length;
+    }
+    var last = last || 1;
+    return last;
+  }
+  this.getActual = function(index){
+    var actual = index + this.headerSize + 1;
+    return actual
+  }
+  this.addValue = function(value){
+    this.values == this.values || this.getValues();
+    var index = this.values.length;  
+    this.values[index] = value;
+    return index;
+  }
+  this.addValueIfNotExists = function(value, filterType){
+    var filterType = filterType || 0;
+    var valueExists = this.filter(value, true, filterType);
+    if (valueExists.length > 0){
+      return valueExists[0];
+    }
+    else{
+      var row = this.addValue(value);
+      return row;
+    }
+  }
+  this.addValuesIfNotExists = function(values, filterType){
+    var filterType = filterType || 0;
+    var indexes = []
+    for ( var i  in values ){
+      indexes.push(addValueIfNotExists(values[i], filterType));
+      last ++;
+    }
+    return indexes;
+  }
+  this.to1d = function(values2d){
     var values1d = [];
     for(var i = 0; i < values2d.length; i++){
       values1d = values1d.concat(values2d[i]);
     }
     return values1d;
+  }
+  this.to2d = function(values1d, spliceby){
+    var values1dcopy = values1d.slice();
+    var values2d = [];
+    while(values1dcopy.length) values2d.push(values1dcopy.splice(0, spliceby));
+    return values2d;
+  }
+  this.getCell = function(index){
+    if (typeof index === "string"){
+      var index = this.getIndexByHeader(index);
+    }
+    var cellIndexes = this.getRangeOrder(index + 1, 1);
+    var cell = this.getRange().getCell(cellIndexes[0], cellIndexes[1]);
+    return cell;
+  }
+  this.getValue = function(index){
+    if (typeof index === "string"){
+      var index = this.getIndexByHeader(index);
+    }
+    var value = this.getCell(index).getValue();
+    this.values[index] = value;
+    return value;
+  }
+  this.getHeader = function(headerIndex){
+    var headerIndex = headerIndex || 1;
+    var cellIndexes = this.getRangeOrder(headerIndex);
+    var header = this.sheet.getRange.getCell(cellIndexes[0], cellIndexes[1]);
+    return header;
+  }
+  this.getIndexByHeader = function(headerName){
+    var headerRange = this.headerRange || this.getHeaderRange();
+    var index = this.headerRange.filter(headerName)[0];
+    return index;
+  }
 }
 
-/**
-* Sends script logfile to an e-mail address
+ColumnOrRow.prototype = new Range1d();
+
+/** Object for managing a column as a 1d array. Inherits from ColumnOrRow
 *
-* @param {string} mailto E-mail address to send logfile to
-* @param {string} description Description included in e-mail subject
-*/ 
-function sendLogFile(mailto, description){
-  date = new Date(),
-    formattedDate = [date.getMonth()+1,
-                     date.getDate(),
-                     date.getFullYear()].join('/')+' '+
-                       [date.getHours(),
-                        date.getMinutes(),
-                        date.getSeconds()].join(':');
-  var subject = 'Logfile for '+ description + ' run at ' + formattedDate;
-  var mailContents = Logger.getLog()
-  try{
-    MailApp.sendEmail(mailto, subject, mailContents);
+* @param {Sheet} sheet The Sheet object the column belongs to
+* @param {number} headerSize The number of rows to ignore when getting and setting values
+* @param {number} columnNumber The column number from which to create the column object
+* @param {number} headerColumn The column containing the header names to enable ORM-like functionality. Optional. If not set the first column in the sheet is used.
+*/
+function Column(sheet, headerSize, columnNumber, headerColumn){
+  this.sheet = sheet;
+  this.column = columnNumber;
+  this.header = headerColumn || 1;
+  this.headerSize = headerSize;
+  this.id = this.column;
+  this.lastOnSheet = function(){
+    return this.sheet.getLastRow();
   }
-  catch(e){
-    Logger.log(e); 
+  this.getRangeOrder = function(row, col){
+    var col = col || this.id;
+    return [row, col];
   }
+  this.getRange = function(){
+    var numRows = this.last();
+    var range = this.sheet.getRange(this.startPoint(), this.column, numRows);
+    return range;
+  }
+  this.get2dParamater = function(getFunc){
+    return 1;
+  }
+  this.getHeaderRange = function(){
+    this.headerRange = this.getColumn(this.sheet, this.headerSize, this.header);
+    return this.headerRange;
+  }
+  this.setValues = function(values1d){
+    var values2d = this.to2d(values1d, 1);
+    var range = this.sheet.getRange(this.startPoint(), this.column, values1d.length).setValues(values2d);
+    this.values = values2d;
+    return range;
+  }
+  this.sortSheet = function(descending){
+    var descending = descending || false;
+    var ascending = ! descending;
+    var range = this.sheet.getRange(headerSize + 1, 1, this.sheet.getLastRow(), this.sheet.getLastColumn()) 
+    range.sort({column: this.column, ascending: ascending});
+  }
+}
+
+Column.prototype = new ColumnOrRow();
+
+/** Object for managing a row as a 1d array. Inherits from ColumnOrRow
+*
+* @param {Sheet} sheet The Sheet object the row belongs to
+* @param {number} headerSize The number of columns to ignore when getting and setting values
+* @param {number} rowNumber The row number from which to create th row object
+* @param {number} headerRow The row containing the header names to enable ORM-like functionality. Optional. If not set the first row in the sheet is used.
+*/
+function Row(sheet, headerSize, rowNumber, headerRow){
+  this.sheet = sheet;
+  this.row = rowNumber;
+  this.header = headerRow || 1;
+  this.headerSize = headerSize;
+  this.id = this.row;
+  this.getCellRange = function(column){
+    return [this.row, column];
+  }
+  this.lastOnSheet = function(){
+    return this.sheet.getLastColumn();
+  }
+  this.getRangeOrder = function(col, row){
+    var row = row || this.id;
+    return [row, col];
+  }
+  this.getRange = function(){
+    var numColumns = this.last();
+    var range = this.sheet.getRange(this.row, this.startPoint(), this.row, numColumns);
+    return range;
+  }
+  this.getHeaderRange = function(){
+    this.headerRange = this.getRow(this.sheet, this.headerSize, this.header);
+    return this.headerRange;
+  }
+  this.get2dParamater = function(getFunc){
+    return this.count();
+  }
+  this.setValues = function(values1d){
+    var numColumns = values1d.length;
+    var values2d = this.to2d(values1d, numColumns);
+    var range = this.sheet.getRange(this.row, this.startPoint(), this.row, numColumns).setValues(values2d);
+    this.values = values2d;
+    return range;
+  }
+}
+
+Row.prototype = new ColumnOrRow();
+                                                   
+/***
+* Converts a 2d range to a 1d cells collection object
+*
+* @param {Sheet} sheet The sheet the cells belong to
+* @param {Array<Array<number>>} indexes An array of cells defined by rows and columns 
+* @return {CellCollection} the collection of cells
+*/
+function getCellCollection(sheet, indexes){
+  	if (typeof indexes[0] == "string"){
+		var cellIndexes = [];
+		for ( var i in indexes ){
+			var range = sheet.getRange(indexes[i]);
+			var individualIndexes = splitRangeIntoCellIndexes(range);
+            for ( var i in individualIndexes ){
+				cellIndexes.push(individualIndexes[i]);
+			}
+		}
+	}
+	else{
+		var cellIndexes = cells;	
+	}                                              
+  var cells = new CellCollection(sheet, cellIndexes);
+  return cells;
+}
+
+/** Returns a Column object
+*
+* @param {Sheet} sheet the sheet object containing the column
+* @param {number} headerSize the number of rows containing headers. Defaults to 0.
+* @param {number|string} columnIdentifier the column id by number or string (which matches the header of the column). This paramater is optional, if not given the next available empty column will be used.
+* @param {number} headerRowIdentifier If columnIdenitifer is a string, this is the row which will be searched to find a column whos' header matches the string. Defaults to 1.
+* @param {number} headerColumn The column containing the header names to enable ORM-like functionality. Optional. If not set the first column in the sheet is used.
+* @return {Column} the column object
+*/
+function getColumn(sheet, headerSize, columnIdentifier, headerRowIdentifier, headerColumn){
+  var headerSize = headerSize || 0;
+  var headerColumn = headerColumn || 1;
+  var columnIdentifier = columnIdentifier || sheet.getLastColumn() + 1;
+  if (typeof columnIdentifier === "string"){
+    var headerRowIdentifier = headerRowIdentifier || 1;
+    var headerRow = getRow(sheet, 0, headerRowIdentifier);
+    var columnIdentifier = headerRow.first(columnIdentifier);
+  }
+  else{
+    errorIfNegative(headerSize, 'getColumn(): headerSize');
+    }
+  return new Column(sheet, headerSize, columnIdentifier, headerColumn);
+}
+
+/** Returns a row object
+*
+* @param {Sheet} sheet the sheet object containing the row
+* @param {number} headerSize the number of columns containing headers. Defaults to 0.
+* @param {number|string} rowIdentifier the row id by number or string (which matches the header of the row). This paramater is optional, if not given the next available row will be used.
+* @param {number} headerColumnIdentifier If rowIdenitifer is a string, this is the column which will be searched to find a row whos' header matches the string. Defaults to 1.
+* @param {number} headerRow The row containing the header names to enable ORM-like functionality. Optional. If not set the first row in the sheet is used.
+* @return {Row} the row object
+*/
+function getRow(sheet, headerSize, rowIdentifier, headerColumnIdentifier, headerRow){
+  var headerRow = headerRow || 1;
+  var headerSize = headerSize || 0;
+  var rowIdentifier = rowIdentifier || sheet.getLastRow() + 1;
+  if (typeof headerColumnIdentifier === "string"){
+    var headerColIdentifier = headerRowIdentifier || 1;
+    var headerCol = getColumn(sheet, 0, headerRowIdentifier);
+    var rowIdentifier = headerCol.first(columnIdentifier);
+  }
+  else{
+  errorIfNegative(headerSize, 'getColumn(): headerSize');
+  }
+
+  return new Row(sheet, headerSize, rowIdentifier, headerRow);
+}
+
+/** Returns a cell by matching row and column headers
+*
+* @param {Sheet} sheet the sheet object containing the cell
+* @param {string} rowHeader the value of the cell's row header
+* @param {string} columnHeader the value of the cell's column header
+* @param {number} rowHeader the row containing the headers. Defaults to 1.
+* @param {number} columnNumber the column containing the headers. Defaults to 1.
+*/
+function getCellByHeaders(sheet, rowHeader, columnHeader, rowNumber, columnNumber){
+  var rowNumber = rowNumber || 1;
+  var columnNumber = columnNumber || 1;
+  var cell = getRow(sheet, 0, rowHeader, rowNumber).getByHeader(columnHeader, columnNumber); 
+  return cell;
 }
